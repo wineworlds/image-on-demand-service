@@ -4,7 +4,7 @@
 	"description": "A TYPO3 extension for providing on-demand image processing services.",
 	"homepage": "https://www.wineworlds.de",
 	"license": "MIT",
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"authors": [
 		{
 			"name": "Kubilay Melnikov",
@@ -21,7 +21,7 @@
 		{
 			"name": "Miro Olma",
 			"role": "Developer",
-			"email": "messer@wineworlds.de",
+			"email": "olma@wineworlds.de",
 			"homepage": "https://www.wineworlds.de/team#miro_olma"
 		}
 	],
