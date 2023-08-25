@@ -4,6 +4,7 @@
 	"description": "A TYPO3 extension for providing on-demand image processing services.",
 	"homepage": "https://www.wineworlds.de",
 	"license": "MIT",
+	"version": "1.0.0",
 	"authors": [
 		{
 			"name": "Kubilay Melnikov",
