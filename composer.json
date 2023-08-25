@@ -1,0 +1,46 @@
+{
+	"name": "wineworlds/image-on-demand-service",
+	"type": "typo3-cms-extension",
+	"description": "A TYPO3 extension for providing on-demand image processing services.",
+	"homepage": "https://www.wineworlds.de",
+	"license": "MIT",
+	"authors": [
+		{
+			"name": "Kubilay Melnikov",
+			"role": "Developer",
+			"email": "melnikov@wineworlds.de",
+			"homepage": "https://www.wineworlds.de/team#kubilay_melnikov"
+		},
+		{
+			"name": "Arnd Messer",
+			"role": "Developer",
+			"email": "messer@wineworlds.de",
+			"homepage": "https://www.wineworlds.de/team#arnd_messer"
+		},
+		{
+			"name": "Miro Olma",
+			"role": "Developer",
+			"email": "messer@wineworlds.de",
+			"homepage": "https://www.wineworlds.de/team#miro_olma"
+		}
+	],
+	"keywords": [
+		"TYPO3 CMS",
+		"Image Processing",
+		"Image Service"
+	],
+	"require": {
+		"typo3/cms-core": "^11.5.26 || ^12.4 || dev-main",
+		"typo3/cms-extbase": "^11.5.26 || ^12.4 || dev-main"
+	},
+	"autoload": {
+		"psr-4": {
+			"Wineworlds\\ImageOnDemandService\\": "Classes/"
+		}
+	},
+	"extra": {
+		"typo3/cms": {
+			"extension-key": "image_on_demand_service"
+		}
+	}
+}
