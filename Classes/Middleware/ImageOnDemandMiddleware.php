@@ -43,7 +43,7 @@ class ImageOnDemandMiddleware implements MiddlewareInterface
             $pathSegments = explode('/', $pathWithoutBase);
 
             // Extract the parameters from the path segments
-            $fileId = $pathSegments[0];
+            $fileReferenceId = $pathSegments[0];
             $width = $pathSegments[1];
             $height = $pathSegments[2];
             $format = $pathSegments[3];
@@ -52,7 +52,7 @@ class ImageOnDemandMiddleware implements MiddlewareInterface
             $fileRepository = GeneralUtility::makeInstance(FileRepository::class);
 
             try {
-                $fileReference = $fileRepository->findFileReferenceByUid((int) $fileId);
+                $fileReference = $fileRepository->findFileReferenceByUid((int) $fileReferenceId);
 
                 $fileReference = $imageService->applyProcessingInstructions($fileReference, [
                     "width" => $width,
