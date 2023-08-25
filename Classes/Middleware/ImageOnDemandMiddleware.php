@@ -18,14 +18,31 @@ use TYPO3\CMS\Core\Resource\FileRepository;
 use TYPO3\CMS\Core\Utility\ExtensionManagementUtility;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Core\Utility\StringUtility;
+use TYPO3\CMS\Core\Http\Stream;
 use TYPO3\CMS\Extbase\Service\ImageService;
 
-class ImageOnDemandMiddleware implements MiddlewareInterface
+use TYPO3\CMS\Core\Configuration\ExtensionConfiguration;
+
+final class ImageOnDemandMiddleware implements MiddlewareInterface
 {
+    public function __construct(
+        private readonly ExtensionConfiguration $extensionConfiguration,
+        private readonly FileRepository $fileRepository,
+        private readonly ImageService $imageService,
+    ) {
+    }
+
     public function process(
         ServerRequestInterface  $request,
         RequestHandlerInterface $handler
     ): ResponseInterface {
+        $imageStep = $this->extensionConfiguration
+            ->get('image_on_demand_service', 'imageStep');
+
+        // $errorMessage = 'Das Bild konnte nicht heruntergeladen werden.';
+        // return (new Response())->withStatus(500)->withBody(new Stream('data://text/plain,' . $errorMessage));
+
+
         // Get the requested path
         /** @var NormalizedParams $normalizedParams */
         $normalizedParams = $request->getAttribute('normalizedParams');
@@ -48,22 +65,19 @@ class ImageOnDemandMiddleware implements MiddlewareInterface
             $height = $pathSegments[2];
             $format = $pathSegments[3];
 
-            $imageService = GeneralUtility::makeInstance(ImageService::class);
-            $fileRepository = GeneralUtility::makeInstance(FileRepository::class);
-
             try {
-                $fileReference = $fileRepository->findFileReferenceByUid((int) $fileReferenceId);
+                $fileReference = $this->fileRepository->findFileReferenceByUid((int) $fileReferenceId);
 
-                $fileReference = $imageService->applyProcessingInstructions($fileReference, [
+                $fileReference = $this->imageService->applyProcessingInstructions($fileReference, [
                     "width" => $width,
                     "height" => $height,
                     "fileExtension" => $format
                 ]);
 
-                $imageUri = $imageService->getImageUri($fileReference, false);
+                $imageUri = $this->imageService->getImageUri($fileReference, false);
             } catch (Exception $e) {
                 $imageUri = $this->getImageNotFoundImage((int) $width, (int) $height);
-                $fileReference = $imageService->getImage($imageUri, null, false);
+                $fileReference = $this->imageService->getImage($imageUri, null, false);
             }
 
             $streamFactory = new StreamFactory();
@@ -81,6 +95,10 @@ class ImageOnDemandMiddleware implements MiddlewareInterface
 
     public function getImageNotFoundImage($width = 400, $height = 400, $text = "Image not found!"): string
     {
+        $height = $height <= 300 ? 300 : $height;
+        $width = $width <= 300 ? 300 : $width;
+        $fontSize = max([min([$width / 15, 80]), 20]);
+
         $imageProcessor = $this->initializeImageProcessor();
         $gifOrPng = $imageProcessor->gifExtension;
         $image = imagecreatetruecolor($width, $height);
@@ -94,17 +112,16 @@ class ImageOnDemandMiddleware implements MiddlewareInterface
             'text' => strtoupper($text),
             'align' => 'center',
             'fontColor' => '#003366',
-            'fontSize' => 30,
+            'fontSize' => $fontSize,
             'fontFile' => ExtensionManagementUtility::extPath('install') . 'Resources/Private/Font/vera.ttf',
-            'offset' => '0,' . $height / 2 + 10,
+            'offset' => '0,' . $height / 2 + $fontSize / 3,
         ];
         $conf['BBOX'] = $imageProcessor->calcBBox($conf);
         $imageProcessor->makeText($image, $conf, $workArea);
-        $outputFile = $this->getImagesPath() . $imageProcessor->filenamePrefix . StringUtility::getUniqueId('gdText') . '.' . $gifOrPng;
+        $outputFile = $this->getImagesPath() . $imageProcessor->filenamePrefix . StringUtility::getUniqueId('imageNotFound') . '.' . $gifOrPng;
         $imageProcessor->ImageWrite($image, $outputFile);
-        $imResult = $imageProcessor->getImageDimensions($outputFile);
 
-        return $imResult[3];
+        return $outputFile;
     }
 
     /**

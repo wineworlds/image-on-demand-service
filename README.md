@@ -1,7 +1,5 @@
 # Image on Demand Service TYPO3 Extension
 
-![Extension Logo](https://www.wineworlds.de/logo.png)
-
 **Image on Demand Service** is a TYPO3 extension that provides on-demand image processing services for your TYPO3 website. It allows you to dynamically manipulate and generate images based on specific requests.
 
 ## Features

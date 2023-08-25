@@ -1,0 +1,2 @@
+# cat=Image; type=int+; label=Image proccesing steps
+imageStep = 100

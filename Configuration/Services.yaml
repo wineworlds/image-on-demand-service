@@ -6,3 +6,9 @@ services:
 
   Wineworlds\ImageOnDemandService\:
     resource: "../Classes/*"
+
+  Wineworlds\ImageOnDemandService\Middleware\ImageOnDemandMiddleware:
+    arguments:
+      - '@TYPO3\CMS\Core\Configuration\ExtensionConfiguration'
+      - '@TYPO3\CMS\Core\Resource\FileRepository'
+      - '@TYPO3\CMS\Extbase\Service\ImageService'
