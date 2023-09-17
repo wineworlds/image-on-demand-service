@@ -43,5 +43,11 @@
 		"typo3/cms": {
 			"extension-key": "image_on_demand_service"
 		}
+	},
+	"config": {
+		"allow-plugins": {
+			"typo3/class-alias-loader": true,
+			"typo3/cms-composer-installers": true
+		}
 	}
 }
