@@ -38,8 +38,10 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
         ServerRequestInterface  $request,
         RequestHandlerInterface $handler
     ): ResponseInterface {
+        // Dieser Variable wird für applyProcessingInstructions benötigt.
         $parameters = [];
-        // TODO: In wie fern macht das hier sin?
+
+        // Mit dieser einstellung kann man Gewährleisten das nicht für jeden Pixel ein neues Bild generiert wird.
         $imageStepWith = $this->getConfigurationValue('imageStepWith');
         $imageStepHeight = $this->getConfigurationValue('imageStepHeight');
 
@@ -64,6 +66,17 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
         $width = ceil((int)($pathSegments[0] ?? 300) / $imageStepWith) * $imageStepWith;
         $height = ceil((int)($pathSegments[1] ?? 300) / $imageStepHeight) * $imageStepHeight;
 
+        /**
+         * TODO: Wollen wir hier auf eine alternative schreibe wechseln?
+         * 
+         * Eventuell so was wie /400x200/ anstatt /400/200/.
+         * Dann könnte man die eigenschaft der Höhe weglassen,
+         * falls man das Bild mit den Originalen Attributen möchte. 
+         * 
+         * Das würde dann so aussehen "/400x/ oder /x200/" je nach dem ob man die Höhe oder breite angeben will.
+         */
+
+        // Hier kann man c oder m verwenden.
         $parameters['width'] = $width . 'c';
         $parameters['height'] = $height . 'c';
 
