@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Wineworlds\ImageOnDemandService\Middleware;
 
 use Exception;
+use GuzzleHttp\Psr7\Query;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
@@ -22,6 +23,7 @@ use TYPO3\CMS\Core\Http\Stream;
 use TYPO3\CMS\Extbase\Service\ImageService;
 
 use TYPO3\CMS\Core\Configuration\ExtensionConfiguration;
+use TYPO3\CMS\Core\Imaging\ImageManipulation\CropVariantCollection;
 
 final class ImageOnDemandMiddleware implements MiddlewareInterface
 {
@@ -36,64 +38,88 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
         ServerRequestInterface  $request,
         RequestHandlerInterface $handler
     ): ResponseInterface {
-        $imageStep = $this->extensionConfiguration
-            ->get('image_on_demand_service', 'imageStep');
-
-        // $errorMessage = 'Das Bild konnte nicht heruntergeladen werden.';
-        // return (new Response())->withStatus(500)->withBody(new Stream('data://text/plain,' . $errorMessage));
-
+        $parameters = [];
+        // TODO: In wie fern macht das hier sin?
+        $imageStepWith = $this->getConfigurationValue('imageStepWith');
+        $imageStepHeight = $this->getConfigurationValue('imageStepHeight');
 
         // Get the requested path
         /** @var NormalizedParams $normalizedParams */
         $normalizedParams = $request->getAttribute('normalizedParams');
-        $requestedPath = $normalizedParams->getRequestUri();
+        $requestUri = $normalizedParams->getRequestUri();
 
         // Define the base path for the image service
         $basePath = '/image-service/';
 
         // Check if the requested path starts with the base path
-        if (strpos($requestedPath, $basePath) === 0) {
-            // Remove the base path from the requested path
-            $pathWithoutBase = substr($requestedPath, strlen($basePath));
+        if (strpos($requestUri, $basePath) !== 0) return $handler->handle($request);
 
-            // Split the path segments
-            $pathSegments = explode('/', $pathWithoutBase);
+        // Remove the base path from the requested path
+        $pathWithoutBase = substr($requestUri, strlen($basePath));
 
-            // Extract the parameters from the path segments
-            $fileReferenceId = $pathSegments[0];
-            $width = $pathSegments[1];
-            $height = $pathSegments[2];
-            $format = $pathSegments[3];
+        // Split the path segments
+        $pathSegments = explode('/', $pathWithoutBase);
 
-            try {
-                $fileReference = $this->fileRepository->findFileReferenceByUid((int) $fileReferenceId);
+        // Extract the parameters from the path segments
+        $width = ceil((int)($pathSegments[0] ?? 300) / $imageStepWith) * $imageStepWith;
+        $height = ceil((int)($pathSegments[1] ?? 300) / $imageStepHeight) * $imageStepHeight;
 
-                $fileReference = $this->imageService->applyProcessingInstructions($fileReference, [
-                    "width" => $width,
-                    "height" => $height,
-                    "fileExtension" => $format
-                ]);
+        $parameters['width'] = $width . 'c';
+        $parameters['height'] = $height . 'c';
 
-                $imageUri = $this->imageService->getImageUri($fileReference, false);
-            } catch (Exception $e) {
-                $imageUri = $this->getImageNotFoundImage((int) $width, (int) $height);
-                $fileReference = $this->imageService->getImage($imageUri, null, false);
-            }
+        // Extract & validate parameter
+        $queryString = $normalizedParams->getQueryString();
+        $queryParams = Query::parse($queryString);
 
-            $streamFactory = new StreamFactory();
-            $response = (new Response())
-                ->withAddedHeader('Content-Length', (string)$fileReference->getSize())
-                ->withAddedHeader('Content-Type', $fileReference->getMimeType())
-                ->withBody($streamFactory->createStreamFromFile($imageUri));
-
-            return $response;
+        // ?fileExt=webp
+        $fileExt = (string)($queryParams['fileExt'] ?? '');
+        if (GeneralUtility::inList(strtolower($GLOBALS['TYPO3_CONF_VARS']['GFX']['imagefile_ext'] ?? ''), $fileExt)) {
+            $parameters['fileExtension'] = $fileExt;
         }
 
+        try {
+            $fileReferenceId = (int)($queryParams['id'] ?? 0);
+            $fileReference = $this->fileRepository->findFileReferenceByUid($fileReferenceId);
 
-        return $handler->handle($request);
+            $cropVariant = (string)($queryParams['crop'] ?? 'default');
+            $cropVariantCollection = $this->createCropVariant((string)$fileReference->getProperty('crop'));
+            $cropArea = $cropVariantCollection->getCropArea($cropVariant);
+            $parameters['crop'] = $cropArea->isEmpty() ? null : $cropArea->makeAbsoluteBasedOnFile($fileReference);
+
+            $fileReference = $this->imageService->applyProcessingInstructions($fileReference, $parameters);
+            $imageUri = $this->imageService->getImageUri($fileReference, false);
+        } catch (Exception $e) {
+            $imageUri = $this->getImageNotFoundImage((int) $width, (int) $height);
+
+            // ?text=das ist nur ein test!!
+            $text = (string)($queryParams['text'] ?? 'Dummy Image');
+
+            // ?bgColor=ff0000
+            $bgColor = (string)($queryParams['bgColor'] ?? '000000');
+
+            // ?textColor=00ff00
+            $textColor = (string)($queryParams['textColor'] ?? 'ffffff');
+
+            $imageUri = $this->getImageNotFoundImage($width, $height, $text, $bgColor, $textColor);
+            $fileReference = $this->imageService->getImage($imageUri, null, false);
+        }
+
+        return $this->createResponse($fileReference, $imageUri);
     }
 
-    public function getImageNotFoundImage($width = 400, $height = 400, $text = "Image not found!"): string
+    private function createResponse($fileReference, $imageUri): Response
+    {
+
+        $streamFactory = new StreamFactory();
+        $response = (new Response())
+            ->withAddedHeader('Content-Length', (string)$fileReference->getSize())
+            ->withAddedHeader('Content-Type', $fileReference->getMimeType())
+            ->withBody($streamFactory->createStreamFromFile($imageUri));
+
+        return $response;
+    }
+
+    public function getImageNotFoundImage($width = 400, $height = 400, $text = "Image not found!", $bgColor = "000000", $textColor = "ffffff"): string
     {
         $height = $height <= 300 ? 300 : $height;
         $width = $width <= 300 ? 300 : $width;
@@ -102,7 +128,10 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
         $imageProcessor = $this->initializeImageProcessor();
         $gifOrPng = $imageProcessor->gifExtension;
         $image = imagecreatetruecolor($width, $height);
-        $backgroundColor = imagecolorallocate($image, 128, 128, 150);
+
+        $bgColor = $imageProcessor->convertColor('#' . $bgColor);
+        $backgroundColor = imagecolorallocate($image, $bgColor[0], $bgColor[1], $bgColor[2]);
+
         imagefilledrectangle($image, 0, 0, $width, $height, $backgroundColor);
         $workArea = [0, 0, $width, $height];
         $conf = [
@@ -111,7 +140,7 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
             'antiAlias' => 1,
             'text' => strtoupper($text),
             'align' => 'center',
-            'fontColor' => '#003366',
+            'fontColor' => '#' . $textColor,
             'fontSize' => $fontSize,
             'fontFile' => ExtensionManagementUtility::extPath('install') . 'Resources/Private/Font/vera.ttf',
             'offset' => '0,' . $height / 2 + $fontSize / 3,
@@ -150,5 +179,19 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
             GeneralUtility::mkdir_deep($imagePath);
         }
         return $imagePath;
+    }
+
+    /**
+     * Return a single configuration value
+     */
+    protected function getConfigurationValue(string $path)
+    {
+        return $this->extensionConfiguration
+            ->get('image_on_demand_service', $path);
+    }
+
+    protected function createCropVariant(string $cropString): CropVariantCollection
+    {
+        return CropVariantCollection::create($cropString);
     }
 }
