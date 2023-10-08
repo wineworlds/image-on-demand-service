@@ -102,8 +102,6 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
             $fileReference = $this->imageService->applyProcessingInstructions($fileReference, $parameters);
             $imageUri = $this->imageService->getImageUri($fileReference, false);
         } catch (Exception $e) {
-            $imageUri = $this->getImageNotFoundImage((int) $width, (int) $height);
-
             // ?text=das ist nur ein test!!
             $text = (string)($queryParams['text'] ?? 'Dummy Image');
 
@@ -113,7 +111,7 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
             // ?textColor=00ff00
             $textColor = (string)($queryParams['textColor'] ?? 'ffffff');
 
-            $imageUri = $this->getImageNotFoundImage($width, $height, $text, $bgColor, $textColor);
+            $imageUri = $this->getImageNotFoundImage((int) $width, (int) $height, $text, $bgColor, $textColor);
             $fileReference = $this->imageService->getImage($imageUri, null, false);
         }
 
