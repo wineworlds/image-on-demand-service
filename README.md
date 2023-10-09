@@ -21,7 +21,24 @@ The extension can be easily installed using [Composer](https://getcomposer.org/)
 
 The Image on Demand Service extension automatically processes requested images that match a specific URL pattern. It uses the `ImageOnDemandMiddleware` class to handle image requests. When an image request URL matches the specified pattern, the middleware processes the request and serves the manipulated image.
 
-### URL Pattern
+### URL Pattern (1.1.0)
+
+The URL pattern for image requests is: `/image-service/{width}/{height}/{filename}?id={fileReferenceId}&type={format}&crop={cropVariant}&text={dummyImageText}&bgColor={dummyImageBgColor}&textColor={dummyImageTextColor}`
+
+Der `filename` wird im caching nicht berücksichtigt.
+
+| Parameter      | Beschreibung                                       | Default-Wert  | Pflichtangabe |
+|----------------------|---------------------------------------------------|---------------|---------------|
+| `/width/`              | Die Breite des generierten Bildes.               | -             | Ja            |
+| `/height/`             | Die Höhe des generierten Bildes.                 | -             | Ja            |
+| `&id=18`                 | Die eindeutige ID der `fileReference`.            | -             | Nein          |
+| `&type=webp`               | Das Format des Bildes (z. B. JPEG, PNG, WebP usw.).| -             | Nein          |
+| `&crop=desktop`               | Der gewählte Bildausschnitt (Crop-Variante).      | `'default'`   | Nein          |
+| `&text=No Image`               | Der Text, der auf dem Dummy Bild angezeigt wird falls keine id übermittelt wird oder kein Bild gefunden wird. | `'Dummy Image'` | Nein      |
+| `&bgColor=ff0000`            | Die Hintergrundfarbe des Dummy Bildes. | `'000000'` | Nein        |
+| `&textColor=0000ff`          | Die Textfarbe des auf dem Dummy Bild angezeigten Texts. | `'ffffff'` | Nein        |
+
+### URL Pattern (1.0.3)
 
 The URL pattern for image requests is: `/image-service/{fileId}/{width}/{height}/{format}/{filename}`
 
