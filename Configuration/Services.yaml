@@ -12,3 +12,9 @@ services:
       - '@TYPO3\CMS\Core\Configuration\ExtensionConfiguration'
       - '@TYPO3\CMS\Core\Resource\FileRepository'
       - '@TYPO3\CMS\Extbase\Service\ImageService'
+      - '@cache.image_on_demand_service'
+
+  cache.image_on_demand_service:
+    class: TYPO3\CMS\Core\Cache\Frontend\FrontendInterface
+    factory: ['@TYPO3\CMS\Core\Cache\CacheManager', "getCache"]
+    arguments: ["image_on_demand_service"]

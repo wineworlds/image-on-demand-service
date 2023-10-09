@@ -10,6 +10,7 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use TYPO3\CMS\Core\Cache\Frontend\FrontendInterface;
 use TYPO3\CMS\Core\Core\Environment;
 use TYPO3\CMS\Core\Http\NormalizedParams;
 use TYPO3\CMS\Core\Http\Response;
@@ -24,6 +25,7 @@ use TYPO3\CMS\Extbase\Service\ImageService;
 
 use TYPO3\CMS\Core\Configuration\ExtensionConfiguration;
 use TYPO3\CMS\Core\Imaging\ImageManipulation\CropVariantCollection;
+use TYPO3\CMS\Core\Resource\FileInterface;
 
 final class ImageOnDemandMiddleware implements MiddlewareInterface
 {
@@ -31,6 +33,7 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
         private readonly ExtensionConfiguration $extensionConfiguration,
         private readonly FileRepository $fileRepository,
         private readonly ImageService $imageService,
+        private readonly FrontendInterface $cache,
     ) {
     }
 
@@ -84,6 +87,19 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
         $queryString = $normalizedParams->getQueryString();
         $queryParams = Query::parse($queryString);
 
+        // Return Cached, when exists
+        $cacheIdentifier = 'image_cache_' . (string)$width . '_' . (string)$height . '_' . md5($queryString);
+        $imageUri = $this->cache->get($cacheIdentifier);
+        if ($imageUri !== false) {
+            $streamFactory = new StreamFactory();
+            $response = (new Response())
+                ->withAddedHeader('Content-Length', (string)filesize($imageUri))
+                ->withAddedHeader('Content-Type', mime_content_type($imageUri))
+                ->withBody($streamFactory->createStreamFromFile($imageUri));
+
+            return $response;
+        }
+
         // ?fileExt=webp
         $fileExt = (string)($queryParams['fileExt'] ?? '');
         if (GeneralUtility::inList(strtolower($GLOBALS['TYPO3_CONF_VARS']['GFX']['imagefile_ext'] ?? ''), $fileExt)) {
@@ -115,10 +131,12 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
             $fileReference = $this->imageService->getImage($imageUri, null, false);
         }
 
+        $this->cache->set($cacheIdentifier, $imageUri);
+
         return $this->createResponse($fileReference, $imageUri);
     }
 
-    private function createResponse($fileReference, $imageUri): Response
+    private function createResponse(FileInterface $fileReference, $imageUri): Response
     {
 
         $streamFactory = new StreamFactory();
@@ -173,7 +191,7 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
     {
         $imageProcessor = GeneralUtility::makeInstance(GraphicalFunctions::class);
         $imageProcessor->dontCheckForExistingTempFile = true;
-        $imageProcessor->filenamePrefix = 'imageOnDemandService-';
+        $imageProcessor->filenamePrefix = 'image_on_demand_service-';
         $imageProcessor->dontCompress = true;
 
         return $imageProcessor;
