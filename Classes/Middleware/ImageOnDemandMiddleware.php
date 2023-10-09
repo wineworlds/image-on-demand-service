@@ -87,17 +87,17 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
         $queryString = $normalizedParams->getQueryString();
         $queryParams = Query::parse($queryString);
 
-        // Return Cached, when exists
+        // Define cache identifier
         $cacheIdentifier = 'image_cache_' . (string)$width . '_' . (string)$height . '_' . md5($queryString);
+
+        // Return cached, when exists
         $imageUri = $this->cache->get($cacheIdentifier);
         if ($imageUri !== false) {
-            $streamFactory = new StreamFactory();
-            $response = (new Response())
-                ->withAddedHeader('Content-Length', (string)filesize($imageUri))
-                ->withAddedHeader('Content-Type', mime_content_type($imageUri))
-                ->withBody($streamFactory->createStreamFromFile($imageUri));
-
-            return $response;
+            return $this->createResponse(
+                $imageUri,
+                (string)filesize($imageUri),
+                mime_content_type($imageUri)
+            );
         }
 
         // ?fileExt=webp
@@ -133,16 +133,20 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
 
         $this->cache->set($cacheIdentifier, $imageUri);
 
-        return $this->createResponse($fileReference, $imageUri);
+        return $this->createResponse(
+            $imageUri,
+            (string) $fileReference->getSize(),
+            $fileReference->getMimeType()
+        );
     }
 
-    private function createResponse(FileInterface $fileReference, $imageUri): Response
+    private function createResponse(string $imageUri, string $fileSize, string $fileMimeType): Response
     {
 
         $streamFactory = new StreamFactory();
         $response = (new Response())
-            ->withAddedHeader('Content-Length', (string)$fileReference->getSize())
-            ->withAddedHeader('Content-Type', $fileReference->getMimeType())
+            ->withAddedHeader('Content-Length', $fileSize)
+            ->withAddedHeader('Content-Type', $fileMimeType)
             ->withBody($streamFactory->createStreamFromFile($imageUri));
 
         return $response;
