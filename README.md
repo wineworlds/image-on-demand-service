@@ -55,8 +55,6 @@ If the requested image is not found or an error occurs during processing, a plac
 ## Contributors
 
 - [Kubilay Melnikov](https://www.wineworlds.de/team#kubilay_melnikov) - Developer
-- [Arnd Messer](https://www.wineworlds.de/team#arnd_messer) - Developer
-- [Miro Olma](https://www.wineworlds.de/team#miro_olma) - Developer
 
 ## License
 
