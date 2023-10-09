@@ -25,18 +25,18 @@ The Image on Demand Service extension automatically processes requested images t
 
 The URL pattern for image requests is: `/image-service/{width}/{height}/{filename}?id={fileReferenceId}&type={format}&crop={cropVariant}&text={dummyImageText}&bgColor={dummyImageBgColor}&textColor={dummyImageTextColor}`
 
-Der `filename` wird im caching nicht berücksichtigt.
+The `filename` is not taken into account in caching.
 
-| Parameter      | Beschreibung                                       | Default-Wert  | Pflichtangabe |
-|----------------------|---------------------------------------------------|---------------|---------------|
-| `/width/`              | Die Breite des generierten Bildes.               | -             | Ja            |
-| `/height/`             | Die Höhe des generierten Bildes.                 | -             | Ja            |
-| `&id=18`                 | Die eindeutige ID der `fileReference`.            | -             | Nein          |
-| `&type=webp`               | Das Format des Bildes (z. B. JPEG, PNG, WebP usw.).| -             | Nein          |
-| `&crop=desktop`               | Der gewählte Bildausschnitt (Crop-Variante).      | `'default'`   | Nein          |
-| `&text=No Image`               | Der Text, der auf dem Dummy Bild angezeigt wird falls keine id übermittelt wird oder kein Bild gefunden wird. | `'Dummy Image'` | Nein      |
-| `&bgColor=ff0000`            | Die Hintergrundfarbe des Dummy Bildes. | `'000000'` | Nein        |
-| `&textColor=0000ff`          | Die Textfarbe des auf dem Dummy Bild angezeigten Texts. | `'ffffff'` | Nein        |
+| Parameter      | Description                                       | Default Value | Required |
+|----------------------|-----------------------------------------------|----------------|------------|
+| `/width/`              | The width of the generated image.             | -             | Yes        |
+| `/height/`             | The height of the generated image.            | -             | Yes        |
+| `&id=18`                 | The unique ID of the `fileReference`.         | -             | No         |
+| `&type=webp`               | The format of the image (e.g., JPEG, PNG, WebP, etc.). | -             | No         |
+| `&crop=desktop`               | The selected image crop variant.               | `'default'`   | No         |
+| `&text=No Image`               | The text displayed on the dummy image if no ID is provided or no image is found. | `'Dummy Image'` | No |
+| `&bgColor=ff0000`            | The background color of the dummy image. | `'000000'` | No        |
+| `&textColor=0000ff`          | The text color of the text displayed on the dummy image. | `'ffffff'` | No        |
 
 ### URL Pattern (1.0.3)
 

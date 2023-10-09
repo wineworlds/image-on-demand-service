@@ -1,13 +1,10 @@
 # Roadmap
 
 ## 1.1.0
-In dieser Version soll die URL Struktur so angepasst werden, das man flexibler ist bei der Übergabe von Parametern.
-Zusätzlich muss ein caching mit bereitgestellt werden.
+In this version, the URL structure should be adjusted to allow greater flexibility in parameter handling. Additionally, caching should be provided.
 
 ## 1.0.4
-Die Extension Variable `imageStepWith` und `imageStepHeight` soll integriert werden.
-Damit soll man einstellen können in welchen Schritten die Bilder generiert werden.
-Das Caching aus version 1.1.0 sollte übernommen werden, genau so wie die steps.
+The extension variables `imageStepWidth` and `imageStepHeight` should be integrated. This will allow users to specify the increments in which images are generated. The caching from version 1.1.0 should be carried over, along with the steps.
 
 ## 1.0.5
-Es wird noch ein `JSON` response benötigt, so das man im Frontend gleich die URL der Datei werden kann, falls man nicht die URl zur API nutzen möchte. Dieser könnte einfach über ein query param ermöglicht werden.
+A `JSON` response is still needed to enable users to obtain the file URL directly in the frontend if they do not wish to use the API URL. This could easily be facilitated through a query parameter.

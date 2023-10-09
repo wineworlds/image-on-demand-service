@@ -41,11 +41,11 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
         ServerRequestInterface  $request,
         RequestHandlerInterface $handler
     ): ResponseInterface {
-        // Dieser Variable wird für applyProcessingInstructions benötigt.
+        // This variable is needed for applyProcessingInstructions.
         $parameters = [];
 
-        // Mit dieser einstellung kann man Gewährleisten das nicht für jeden Pixel ein neues Bild generiert wird.
-        $imageStepWith = $this->getConfigurationValue('imageStepWith');
+        // With this setting, you can ensure that a new image is not generated for each pixel.
+        $imageStepWidth = $this->getConfigurationValue('imageStepWidth');
         $imageStepHeight = $this->getConfigurationValue('imageStepHeight');
 
         // Get the requested path
@@ -66,20 +66,19 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
         $pathSegments = explode('/', $pathWithoutBase);
 
         // Extract the parameters from the path segments
-        $width = ceil((int)($pathSegments[0] ?? 300) / $imageStepWith) * $imageStepWith;
+        $width = ceil((int)($pathSegments[0] ?? 300) / $imageStepWidth) * $imageStepWidth;
         $height = ceil((int)($pathSegments[1] ?? 300) / $imageStepHeight) * $imageStepHeight;
 
         /**
-         * TODO: Wollen wir hier auf eine alternative schreibe wechseln?
+         * TODO: Do we want to switch to an alternative syntax here?
          * 
-         * Eventuell so was wie /400x200/ anstatt /400/200/.
-         * Dann könnte man die eigenschaft der Höhe weglassen,
-         * falls man das Bild mit den Originalen Attributen möchte. 
+         * Perhaps something like /400x200/ instead of /400/200/.
+         * Then, we could omit the height property if we want to use the original attributes of the image. 
          * 
-         * Das würde dann so aussehen "/400x/ oder /x200/" je nach dem ob man die Höhe oder breite angeben will.
+         * This would look like "/400x/" or "/x200/" depending on whether you want to specify the height or width.
          */
 
-        // Hier kann man c oder m verwenden.
+        // Here, you can use 'c' or 'm'.
         $parameters['width'] = $width . 'c';
         $parameters['height'] = $height . 'c';
 
