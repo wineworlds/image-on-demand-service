@@ -35,6 +35,8 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
     private string $text;
     private string $backgroundColor = "000000";
     private string $fontColor = "ffffff";
+    private ServerRequestInterface  $request;
+    private RequestHandlerInterface $handler;
 
     public function __construct(
         private readonly ExtensionConfiguration $extensionConfiguration,
@@ -48,6 +50,28 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
         ServerRequestInterface  $request,
         RequestHandlerInterface $handler
     ): ResponseInterface {
+        $this->request = $request;
+        $this->handler = $handler;
+
+        try {
+            /**
+             * Hier wird geprüft ob diese Middleware angesprochen wird.
+             * Ohne eine weitere Extension ist es nicht möglich die Middleware an einen bestimmten Pfad zu binden.
+             * 
+             * Wenn die URL nicht zutrifft wird ein "throw" angestoßen und über den catch geht es dann weiter an die nächste middleware.
+             * Auch die darauf folgenden Methoden erzeugen diesen Fehler.
+             * 
+             * Allerdings fällt mir gerade ein,
+             * das auch wenn kein Bild gefunden wird ein throw ausgelöst wird,
+             * hier würde ich allerdings gerne ein generiertes Bild als Antwort liefern.
+             */
+            $this->validateMiddleware();
+
+
+        } catch (Exception $e) {
+            $handler->handle($request);
+        }
+
         /**
          * TODO: Neuer Aufbau mit eigenen Methoden
          * 
@@ -164,6 +188,25 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
             (string) $fileReference->getSize(),
             $fileReference->getMimeType()
         );
+    }
+
+    private function extractParameter()
+    {
+
+    }
+
+    private function validateMiddleware()
+    {
+        // Get the requested path
+        /** @var NormalizedParams $normalizedParams */
+        $normalizedParams = $this->request->getAttribute('normalizedParams');
+        $requestUri = $normalizedParams->getRequestUri();
+
+        // Define the base path for the image service
+        $basePath = '/image-service/';
+
+        // Check if the requested path starts with the base path
+        if (strpos($requestUri, $basePath) !== 0) throw new Exception();
     }
 
     private function createResponse(string $imageUri, string $fileSize, string $fileMimeType): Response
