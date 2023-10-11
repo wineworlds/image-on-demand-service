@@ -29,6 +29,13 @@ use TYPO3\CMS\Core\Resource\FileInterface;
 
 final class ImageOnDemandMiddleware implements MiddlewareInterface
 {
+    private int $fontSize = 16;
+    private int $width = 400;
+    private int $height = 400;
+    private string $text;
+    private string $backgroundColor = "000000";
+    private string $fontColor = "ffffff";
+
     public function __construct(
         private readonly ExtensionConfiguration $extensionConfiguration,
         private readonly FileRepository $fileRepository,
@@ -41,6 +48,20 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
         ServerRequestInterface  $request,
         RequestHandlerInterface $handler
     ): ResponseInterface {
+        /**
+         * TODO: Neuer Aufbau mit eigenen Methoden
+         * 
+         * 1. Prüfen ob der image service angesprochen wird.
+         * 
+         * 2. Path Params und Query Params Extrahieren & Validieren.
+         * 
+         * 3. Falls keine ID Vorhanden ist Dummy Image erzeugen.
+         * 
+         * 4. Falls ID Vorhanden Bild laden & processen.
+         * 
+         * 5. Falls es zu einem Fehler kommt, Bild nicht Gefunden Bild erzeugen.
+         */
+
         // This variable is needed for applyProcessingInstructions.
         $parameters = [];
 
@@ -68,6 +89,9 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
         // Extract the parameters from the path segments
         $width = ceil((int)($pathSegments[0] ?? 300) / $imageStepWidth) * $imageStepWidth;
         $height = ceil((int)($pathSegments[1] ?? 300) / $imageStepHeight) * $imageStepHeight;
+
+        $this->width = $width;
+        $this->height = $height;
 
         /**
          * TODO: Do we want to switch to an alternative syntax here?
@@ -110,7 +134,7 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
             $fileReference = $this->fileRepository->findFileReferenceByUid($fileReferenceId);
 
             $cropVariant = (string)($queryParams['crop'] ?? 'default');
-            $cropVariantCollection = $this->createCropVariant((string)$fileReference->getProperty('crop'));
+            $cropVariantCollection = CropVariantCollection::create((string)$fileReference->getProperty('crop'));
             $cropArea = $cropVariantCollection->getCropArea($cropVariant);
             $parameters['crop'] = $cropArea->isEmpty() ? null : $cropArea->makeAbsoluteBasedOnFile($fileReference);
 
@@ -118,15 +142,18 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
             $imageUri = $this->imageService->getImageUri($fileReference, false);
         } catch (Exception $e) {
             // ?text=das ist nur ein test!!
-            $text = (string)($queryParams['text'] ?? 'Dummy Image');
+            $text = (string)($queryParams['text'] ?? null);
+            $this->text = $text;
 
             // ?bgColor=ff0000
             $bgColor = (string)($queryParams['bgColor'] ?? '000000');
+            $this->backgroundColor = $bgColor;
 
             // ?textColor=00ff00
             $textColor = (string)($queryParams['textColor'] ?? 'ffffff');
+            $this->fontColor = $textColor;
 
-            $imageUri = $this->getImageNotFoundImage((int) $width, (int) $height, $text, $bgColor, $textColor);
+            $imageUri = $this->createImageNotFoundImage($text);
             $fileReference = $this->imageService->getImage($imageUri, null, false);
         }
 
@@ -151,51 +178,67 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
         return $response;
     }
 
-    public function getImageNotFoundImage($width = 400, $height = 400, $text = "Image not found!", $bgColor = "000000", $textColor = "ffffff"): string
+    /**
+     * Create dummy image and return the url to the image.
+     */
+    private function createDummyImage(string $text = "Dummy Image"): string
     {
-        $height = $height <= 300 ? 300 : $height;
-        $width = $width <= 300 ? 300 : $width;
-        $fontSize = max([min([$width / 15, 80]), 20]);
+        $w = $this->width;
+        $h = $this->height;
+        $s = $this->fontSize;
 
+        // Create blank image
         $imageProcessor = $this->initializeImageProcessor();
         $gifOrPng = $imageProcessor->gifExtension;
-        $image = imagecreatetruecolor($width, $height);
+        $dummyImage = imagecreatetruecolor($w, $h);
 
-        $bgColor = $imageProcessor->convertColor('#' . $bgColor);
-        $backgroundColor = imagecolorallocate($image, $bgColor[0], $bgColor[1], $bgColor[2]);
+        // Fill Background with color
+        $bgColorHEX = "#$this->backgroundColor";
+        [$R, $G, $B] = $imageProcessor->convertColor($bgColorHEX);
+        $bgColorRGB = imagecolorallocate($dummyImage, $R, $G, $B);
+        imagefilledrectangle($dummyImage, 0, 0, $w, $h, $bgColorRGB);
 
-        imagefilledrectangle($image, 0, 0, $width, $height, $backgroundColor);
-        $workArea = [0, 0, $width, $height];
+        // Write text inside image
+        $fontColorHEX = "#$this->fontColor";
+        $offsetY = $h / 2 + $s / 3;
+        $workArea = [0, 0, $w, $h];
         $conf = [
             'iterations' => 1,
             'angle' => 0,
             'antiAlias' => 1,
-            'text' => strtoupper($text),
+            'text' => $text,
             'align' => 'center',
-            'fontColor' => '#' . $textColor,
-            'fontSize' => $fontSize,
+            'fontColor' => $fontColorHEX,
+            'fontSize' => $s,
+            // TODO: Diese Abhängigkeit muss aufgelöst werden.
             'fontFile' => ExtensionManagementUtility::extPath('install') . 'Resources/Private/Font/vera.ttf',
-            'offset' => '0,' . $height / 2 + $fontSize / 3,
+            'offset' => "0,$offsetY",
         ];
         $conf['BBOX'] = $imageProcessor->calcBBox($conf);
         $imageProcessor->makeText($image, $conf, $workArea);
-        $outputFile = $this->getImagesPath() . $imageProcessor->filenamePrefix . StringUtility::getUniqueId('imageNotFound') . '.' . $gifOrPng;
-        $imageProcessor->ImageWrite($image, $outputFile);
 
-        return $outputFile;
+        // Write file and return the path 
+        $filePath = $this->getImagesPath() . $imageProcessor->filenamePrefix . '_' . StringUtility::getUniqueId() . '.' . $gifOrPng;
+        $imageProcessor->ImageWrite($image, $filePath);
+
+        return $filePath;
+    }
+
+    /**
+     * Create image not found image and return the url to the image.
+     */
+    public function createImageNotFoundImage(string $text = "Image not found!"): string
+    {
+        return $this->createDummyImage($text);
     }
 
     /**
      * Initialize image processor
-     *
-     * @return GraphicalFunctions Initialized image processor
      */
     protected function initializeImageProcessor(): GraphicalFunctions
     {
         $imageProcessor = GeneralUtility::makeInstance(GraphicalFunctions::class);
-        $imageProcessor->dontCheckForExistingTempFile = true;
-        $imageProcessor->filenamePrefix = 'image_on_demand_service-';
-        $imageProcessor->dontCompress = true;
+        $imageProcessor->filenamePrefix = 'image_on_demand_service';
 
         return $imageProcessor;
     }
@@ -207,23 +250,17 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
     protected function getImagesPath(): string
     {
         $imagePath = Environment::getPublicPath() . '/typo3temp/assets/images/';
-        if (!is_dir($imagePath)) {
-            GeneralUtility::mkdir_deep($imagePath);
-        }
+
+        if (!is_dir($imagePath)) GeneralUtility::mkdir_deep($imagePath);
+
         return $imagePath;
     }
 
     /**
      * Return a single configuration value
      */
-    protected function getConfigurationValue(string $path)
+    protected function getConfigurationValue(string $path = ''): mixed
     {
-        return $this->extensionConfiguration
-            ->get('image_on_demand_service', $path);
-    }
-
-    protected function createCropVariant(string $cropString): CropVariantCollection
-    {
-        return CropVariantCollection::create($cropString);
+        return $this->extensionConfiguration->get('image_on_demand_service', $path);
     }
 }
