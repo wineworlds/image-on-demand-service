@@ -66,10 +66,23 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
              * hier würde ich allerdings gerne ein generiertes Bild als Antwort liefern.
              */
             $this->validateMiddleware();
-
-
         } catch (Exception $e) {
-            $handler->handle($request);
+            switch ($e->getMessage()) {
+                case 'IMAGE_NOT_FOUND':
+                    $imageNotFoundUri = $this->createImageNotFoundImage($this->text);
+                    $fileReference = $this->imageService->getImage($imageNotFoundUri, null, false);
+
+                    $this->createResponse(
+                        $imageNotFoundUri,
+                        (string) $fileReference->getSize(),
+                        $fileReference->getMimeType()
+                    );
+                    break;
+
+                default:
+                    $handler->handle($request);
+                    break;
+            }
         }
 
         /**
@@ -192,7 +205,6 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
 
     private function extractParameter()
     {
-
     }
 
     private function validateMiddleware()
