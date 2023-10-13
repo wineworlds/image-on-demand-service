@@ -29,7 +29,11 @@ use TYPO3\CMS\Core\Resource\FileInterface;
 
 final class ImageOnDemandMiddleware implements MiddlewareInterface
 {
+    private array $parameters = [];
     private int $fontSize = 16;
+    private string $cropVariant = 'default';
+    private string $cacheIdentifier = '';
+    private int $fileReferenceId = 0;
     private int $width = 400;
     private int $height = 400;
     private string $text;
@@ -66,13 +70,39 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
              * hier würde ich allerdings gerne ein generiertes Bild als Antwort liefern.
              */
             $this->validateMiddleware();
+
+            $this->extractParameter();
+
+            $imageUri = $this->cache->get($this->cacheIdentifier);
+            if ($imageUri !== false) {
+                return $this->createResponse(
+                    $imageUri,
+                    (string)filesize($imageUri),
+                    mime_content_type($imageUri)
+                );
+            }
+
+            if (!$this->fileReferenceId) {
+                $imageUri = $this->createDummyImage($this->text);
+                $fileReference = $this->imageService->getImage($imageUri, null, false);
+            } else {
+                [$fileReference, $imageUri] = $this->loadImage();
+            }
+
+            $this->cache->set($this->cacheIdentifier, $imageUri);
+
+            return $this->createResponse(
+                $imageUri,
+                (string) $fileReference->getSize(),
+                $fileReference->getMimeType()
+            );
         } catch (Exception $e) {
             switch ($e->getMessage()) {
                 case 'IMAGE_NOT_FOUND':
                     $imageNotFoundUri = $this->createImageNotFoundImage($this->text);
                     $fileReference = $this->imageService->getImage($imageNotFoundUri, null, false);
 
-                    $this->createResponse(
+                    return $this->createResponse(
                         $imageNotFoundUri,
                         (string) $fileReference->getSize(),
                         $fileReference->getMimeType()
@@ -80,131 +110,85 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
                     break;
 
                 default:
-                    $handler->handle($request);
+                    return $handler->handle($request);
                     break;
             }
         }
+    }
 
-        /**
-         * TODO: Neuer Aufbau mit eigenen Methoden
-         * 
-         * 1. Prüfen ob der image service angesprochen wird.
-         * 
-         * 2. Path Params und Query Params Extrahieren & Validieren.
-         * 
-         * 3. Falls keine ID Vorhanden ist Dummy Image erzeugen.
-         * 
-         * 4. Falls ID Vorhanden Bild laden & processen.
-         * 
-         * 5. Falls es zu einem Fehler kommt, Bild nicht Gefunden Bild erzeugen.
-         */
-
-        // This variable is needed for applyProcessingInstructions.
-        $parameters = [];
-
+    private function extractParameter()
+    {
         // With this setting, you can ensure that a new image is not generated for each pixel.
         $imageStepWidth = $this->getConfigurationValue('imageStepWidth');
         $imageStepHeight = $this->getConfigurationValue('imageStepHeight');
 
         // Get the requested path
         /** @var NormalizedParams $normalizedParams */
-        $normalizedParams = $request->getAttribute('normalizedParams');
+        $normalizedParams = $this->request->getAttribute('normalizedParams');
         $requestUri = $normalizedParams->getRequestUri();
 
         // Define the base path for the image service
         $basePath = '/image-service/';
 
-        // Check if the requested path starts with the base path
-        if (strpos($requestUri, $basePath) !== 0) return $handler->handle($request);
-
         // Remove the base path from the requested path
         $pathWithoutBase = substr($requestUri, strlen($basePath));
 
         // Split the path segments
-        $pathSegments = explode('/', $pathWithoutBase);
+        [$width, $height] = explode('/', $pathWithoutBase);
 
         // Extract the parameters from the path segments
-        $width = ceil((int)($pathSegments[0] ?? 300) / $imageStepWidth) * $imageStepWidth;
-        $height = ceil((int)($pathSegments[1] ?? 300) / $imageStepHeight) * $imageStepHeight;
-
-        $this->width = $width;
-        $this->height = $height;
-
-        /**
-         * TODO: Do we want to switch to an alternative syntax here?
-         * 
-         * Perhaps something like /400x200/ instead of /400/200/.
-         * Then, we could omit the height property if we want to use the original attributes of the image. 
-         * 
-         * This would look like "/400x/" or "/x200/" depending on whether you want to specify the height or width.
-         */
+        $this->width = ceil((int)($width ?? 400) / $imageStepWidth) * $imageStepWidth;
+        $this->height = ceil((int)($height ?? 400) / $imageStepHeight) * $imageStepHeight;
 
         // Here, you can use 'c' or 'm'.
-        $parameters['width'] = $width . 'c';
-        $parameters['height'] = $height . 'c';
+        $this->parameters['width'] = $width . 'c';
+        $this->parameters['height'] = $height . 'c';
 
         // Extract & validate parameter
         $queryString = $normalizedParams->getQueryString();
         $queryParams = Query::parse($queryString);
 
-        // Define cache identifier
-        $cacheIdentifier = 'image_cache_' . (string)$width . '_' . (string)$height . '_' . md5($queryString);
-
-        // Return cached, when exists
-        $imageUri = $this->cache->get($cacheIdentifier);
-        if ($imageUri !== false) {
-            return $this->createResponse(
-                $imageUri,
-                (string)filesize($imageUri),
-                mime_content_type($imageUri)
-            );
-        }
+        $this->cacheIdentifier = 'image_cache_' . (string)$width . '_' . (string)$height . '_' . md5($queryString);
 
         // ?fileExt=webp
         $fileExt = (string)($queryParams['fileExt'] ?? '');
         if (GeneralUtility::inList(strtolower($GLOBALS['TYPO3_CONF_VARS']['GFX']['imagefile_ext'] ?? ''), $fileExt)) {
-            $parameters['fileExtension'] = $fileExt;
+            $this->parameters['fileExtension'] = $fileExt;
         }
 
-        try {
-            $fileReferenceId = (int)($queryParams['id'] ?? 0);
-            $fileReference = $this->fileRepository->findFileReferenceByUid($fileReferenceId);
+        // ?text=das ist nur ein test!!
+        $text = (string)($queryParams['text'] ?? null);
+        $this->text = $text;
 
-            $cropVariant = (string)($queryParams['crop'] ?? 'default');
-            $cropVariantCollection = CropVariantCollection::create((string)$fileReference->getProperty('crop'));
-            $cropArea = $cropVariantCollection->getCropArea($cropVariant);
-            $parameters['crop'] = $cropArea->isEmpty() ? null : $cropArea->makeAbsoluteBasedOnFile($fileReference);
+        // ?bgColor=ff0000
+        $bgColor = (string)($queryParams['bgColor'] ?? '000000');
+        $this->backgroundColor = $bgColor;
 
-            $fileReference = $this->imageService->applyProcessingInstructions($fileReference, $parameters);
-            $imageUri = $this->imageService->getImageUri($fileReference, false);
-        } catch (Exception $e) {
-            // ?text=das ist nur ein test!!
-            $text = (string)($queryParams['text'] ?? null);
-            $this->text = $text;
+        // ?textColor=00ff00
+        $textColor = (string)($queryParams['textColor'] ?? 'ffffff');
+        $this->fontColor = $textColor;
 
-            // ?bgColor=ff0000
-            $bgColor = (string)($queryParams['bgColor'] ?? '000000');
-            $this->backgroundColor = $bgColor;
+        // ?id=88
+        $fileReferenceId = (int)($queryParams['id'] ?? 0);
+        $this->fileReferenceId = $fileReferenceId;
 
-            // ?textColor=00ff00
-            $textColor = (string)($queryParams['textColor'] ?? 'ffffff');
-            $this->fontColor = $textColor;
-
-            $imageUri = $this->createImageNotFoundImage($text);
-            $fileReference = $this->imageService->getImage($imageUri, null, false);
-        }
-
-        $this->cache->set($cacheIdentifier, $imageUri);
-
-        return $this->createResponse(
-            $imageUri,
-            (string) $fileReference->getSize(),
-            $fileReference->getMimeType()
-        );
+        // ?crop=desktop
+        $cropVariant = (string)($queryParams['crop'] ?? 'default');
+        $this->cropVariant = $cropVariant;
     }
 
-    private function extractParameter()
+    private function loadImage()
     {
+        $fileReference = $this->fileRepository->findFileReferenceByUid($this->fileReferenceId);
+
+        $cropVariantCollection = CropVariantCollection::create((string)$fileReference->getProperty('crop'));
+        $cropArea = $cropVariantCollection->getCropArea($this->cropVariant);
+        $parameters['crop'] = $cropArea->isEmpty() ? null : $cropArea->makeAbsoluteBasedOnFile($fileReference);
+
+        $fileReference = $this->imageService->applyProcessingInstructions($fileReference, $parameters);
+        $imageUri = $this->imageService->getImageUri($fileReference, false);
+
+        return [$fileReference, $imageUri];
     }
 
     private function validateMiddleware()
