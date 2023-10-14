@@ -26,6 +26,8 @@ use TYPO3\CMS\Core\Imaging\ImageManipulation\CropVariantCollection;
 
 final class ImageOnDemandMiddleware implements MiddlewareInterface
 {
+    private const IMAGE_NOT_FOUND_MESSAGE = 'IMAGE_NOT_FOUND';
+
     private array $parameters = [];
     private int $fontSize = 16;
     private string $cropVariant = 'default';
@@ -51,9 +53,6 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
         ServerRequestInterface  $request,
         RequestHandlerInterface $handler
     ): ResponseInterface {
-        $this->request = $request;
-        $this->handler = $handler;
-
         try {
             /**
              * Hier wird geprüft ob diese Middleware angesprochen wird.
@@ -63,10 +62,10 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
              * 
              * Wenn das Bild nicht gefunden wird, wird auch ein "throw" ausgelöst und ein "Bild nicht gefunden" Bild erzeugt.
              */
-            $this->validateMiddleware();
+            $this->validateRequest($request);
+            $this->extractParameter($request);
 
-            $this->extractParameter();
-
+            // Prüft ob die Bild URL im Cache hinterlegt ist.
             $imageUri = $this->cache->get($this->cacheIdentifier);
             if ($imageUri !== false) {
                 return $this->createResponse(
@@ -76,6 +75,7 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
                 );
             }
 
+            // Wenn keine File Reference ID Definiert ist, wird stattdessen ein dummy bild erzeugt.
             if (!$this->fileReferenceId) {
                 $imageUri = $this->createDummyImage($this->text);
                 $fileReference = $this->imageService->getImage($imageUri, null, false);
@@ -91,34 +91,30 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
                 $fileReference->getMimeType()
             );
         } catch (Exception $e) {
-            switch ($e->getMessage()) {
-                case 'IMAGE_NOT_FOUND':
-                    $imageNotFoundUri = $this->createDummyImage("Image not found!");
-                    $fileReference = $this->imageService->getImage($imageNotFoundUri, null, false);
-
-                    return $this->createResponse(
-                        $imageNotFoundUri,
-                        (string) $fileReference->getSize(),
-                        $fileReference->getMimeType()
-                    );
-                    break;
-
-                default:
-                    return $this->handler->handle($request);
-                    break;
+            if ($e->getMessage() === self::IMAGE_NOT_FOUND_MESSAGE) {
+                return $this->handleImageNotFound();
             }
+
+            return $handler->handle($request);
         }
     }
 
-    private function extractParameter()
+    private function handleImageNotFound(): ResponseInterface
     {
-        // With this setting, you can ensure that a new image is not generated for each pixel.
+        $imageNotFoundUri = $this->createDummyImage('Image not found!');
+        $fileReference = $this->imageService->getImage($imageNotFoundUri, null, false);
+
+        return $this->createResponse($imageNotFoundUri, (string) $fileReference->getSize(), $fileReference->getMimeType());
+    }
+
+    private function extractParameter(ServerRequestInterface  $request)
+    {
+        // Get image step width and height from configuration
         $imageStepWidth = $this->getConfigurationValue('imageStepWidth');
         $imageStepHeight = $this->getConfigurationValue('imageStepHeight');
 
-        // Get the requested path
-        /** @var NormalizedParams $normalizedParams */
-        $normalizedParams = $this->request->getAttribute('normalizedParams');
+        // Get the requested path from the request
+        $normalizedParams = $request->getAttribute('normalizedParams');
         $requestUri = $normalizedParams->getRequestUri();
 
         // Define the base path for the image service
@@ -130,49 +126,59 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
         // Split the path segments
         [$width, $height] = explode('/', $path);
 
-        // Extract the parameters from the path segments
+        // Extract and sanitize width and height
         $width = (int) ceil(($width ?? 400) / $imageStepWidth) * $imageStepWidth;
         $height = (int) ceil(($height ?? 400) / $imageStepHeight) * $imageStepHeight;
 
         $this->width = $width;
-        $this->width = $width;
+        $this->height = $height;
 
-        // Here, you can use 'c' or 'm'.
+        // Define 'width' and 'height' in the parameters array
         $this->parameters['width'] = $width . 'c';
         $this->parameters['height'] = $height . 'c';
 
-        // Extract & validate parameter
+        // Extract and validate query parameters
         $queryString = $normalizedParams->getQueryString();
         $queryParams = Query::parse($queryString);
 
-        // set cache key
-        $this->cacheIdentifier = 'image_cache_' . (string)$width . '_' . (string)$height . '_' . md5($queryString);
+        // Set cache key
+        $this->cacheIdentifier = 'image_cache_' . (string) $width . '_' . (string) $height . '_' . md5($queryString);
 
-        // ?fileExt=webp
-        $fileExt = (string)($queryParams['fileExt'] ?? '');
+        // Process 'fileExt' query parameter
+        $fileExt = (string) ($queryParams['fileExt'] ?? '');
         if (GeneralUtility::inList(strtolower($GLOBALS['TYPO3_CONF_VARS']['GFX']['imagefile_ext'] ?? ''), $fileExt)) {
             $this->parameters['fileExtension'] = $fileExt;
         }
 
-        // ?text=das ist nur ein test!!
-        $text = (string)($queryParams['text'] ?? null);
-        if ($text) $this->text = $text;
+        // Process 'text' query parameter
+        $text = (string) ($queryParams['text'] ?? '');
+        if ($text) {
+            $this->text = $text;
+        }
 
-        // ?bgColor=ff0000
-        $bgColor = (string)($queryParams['bgColor'] ?? '000000');
-        if ($bgColor) $this->backgroundColor = $bgColor;
+        // Process 'bgColor' query parameter
+        $bgColor = (string) ($queryParams['bgColor'] ?? '');
+        if ($bgColor) {
+            $this->backgroundColor = $bgColor;
+        }
 
-        // ?textColor=00ff00
-        $textColor = (string)($queryParams['textColor'] ?? 'ffffff');
-        if ($textColor) $this->fontColor = $textColor;
+        // Process 'textColor' query parameter
+        $textColor = (string) ($queryParams['textColor'] ?? '');
+        if ($textColor) {
+            $this->fontColor = $textColor;
+        }
 
-        // ?id=88
-        $fileReferenceId = (int)($queryParams['id'] ?? 0);
-        if ($fileReferenceId) $this->fileReferenceId = $fileReferenceId;
+        // Process 'id' query parameter
+        $fileReferenceId = (int) ($queryParams['id'] ?? 0);
+        if ($fileReferenceId) {
+            $this->fileReferenceId = $fileReferenceId;
+        }
 
-        // ?crop=desktop
-        $cropVariant = (string)($queryParams['crop'] ?? 'default');
-        if ($cropVariant) $this->cropVariant = $cropVariant;
+        // Process 'crop' query parameter
+        $cropVariant = (string) ($queryParams['crop'] ?? '');
+        if ($cropVariant) {
+            $this->cropVariant = $cropVariant;
+        }
     }
 
     private function loadImage()
@@ -189,15 +195,15 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
 
             return [$fileReference, $imageUri];
         } catch (Exception $e) {
-            throw new Exception("IMAGE_NOT_FOUND");
+            throw new Exception(self::IMAGE_NOT_FOUND_MESSAGE);
         }
     }
 
-    private function validateMiddleware()
+    private function validateRequest(ServerRequestInterface  $request)
     {
         // Get the requested path
         /** @var NormalizedParams $normalizedParams */
-        $normalizedParams = $this->request->getAttribute('normalizedParams');
+        $normalizedParams = $request->getAttribute('normalizedParams');
         $requestUri = $normalizedParams->getRequestUri();
 
         // Define the base path for the image service
