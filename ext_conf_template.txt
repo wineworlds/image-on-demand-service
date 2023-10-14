@@ -1,5 +1,5 @@
 # cat=Image; type=int+; label=Image with proccesing steps
-imageStepWith = 100
+imageStepWidth = 100
 
 # cat=Image; type=int+; label=Image height proccesing steps
 imageStepHeight = 50

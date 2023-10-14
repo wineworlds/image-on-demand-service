@@ -20,12 +20,9 @@ use TYPO3\CMS\Core\Resource\FileRepository;
 use TYPO3\CMS\Core\Utility\ExtensionManagementUtility;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Core\Utility\StringUtility;
-use TYPO3\CMS\Core\Http\Stream;
 use TYPO3\CMS\Extbase\Service\ImageService;
-
 use TYPO3\CMS\Core\Configuration\ExtensionConfiguration;
 use TYPO3\CMS\Core\Imaging\ImageManipulation\CropVariantCollection;
-use TYPO3\CMS\Core\Resource\FileInterface;
 
 final class ImageOnDemandMiddleware implements MiddlewareInterface
 {
@@ -36,7 +33,7 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
     private int $fileReferenceId = 0;
     private int $width = 400;
     private int $height = 400;
-    private string $text;
+    private string $text = "Dummy Image";
     private string $backgroundColor = "000000";
     private string $fontColor = "ffffff";
     private ServerRequestInterface  $request;
@@ -99,7 +96,7 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
         } catch (Exception $e) {
             switch ($e->getMessage()) {
                 case 'IMAGE_NOT_FOUND':
-                    $imageNotFoundUri = $this->createImageNotFoundImage($this->text);
+                    $imageNotFoundUri = $this->createDummyImage("Image not found!");
                     $fileReference = $this->imageService->getImage($imageNotFoundUri, null, false);
 
                     return $this->createResponse(
@@ -110,7 +107,7 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
                     break;
 
                 default:
-                    return $handler->handle($request);
+                    return $this->handler->handle($request);
                     break;
             }
         }
@@ -131,14 +128,17 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
         $basePath = '/image-service/';
 
         // Remove the base path from the requested path
-        $pathWithoutBase = substr($requestUri, strlen($basePath));
+        [$path] = explode('?', substr($requestUri, strlen($basePath)));
 
         // Split the path segments
-        [$width, $height] = explode('/', $pathWithoutBase);
+        [$width, $height] = explode('/', $path);
 
         // Extract the parameters from the path segments
-        $this->width = ceil((int)($width ?? 400) / $imageStepWidth) * $imageStepWidth;
-        $this->height = ceil((int)($height ?? 400) / $imageStepHeight) * $imageStepHeight;
+        $width = (int) ceil(($width ?? 400) / $imageStepWidth) * $imageStepWidth;
+        $height = (int) ceil(($height ?? 400) / $imageStepHeight) * $imageStepHeight;
+
+        $this->width = $width;
+        $this->width = $width;
 
         // Here, you can use 'c' or 'm'.
         $this->parameters['width'] = $width . 'c';
@@ -148,6 +148,7 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
         $queryString = $normalizedParams->getQueryString();
         $queryParams = Query::parse($queryString);
 
+        // set cache key
         $this->cacheIdentifier = 'image_cache_' . (string)$width . '_' . (string)$height . '_' . md5($queryString);
 
         // ?fileExt=webp
@@ -158,37 +159,41 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
 
         // ?text=das ist nur ein test!!
         $text = (string)($queryParams['text'] ?? null);
-        $this->text = $text;
+        if ($text) $this->text = $text;
 
         // ?bgColor=ff0000
         $bgColor = (string)($queryParams['bgColor'] ?? '000000');
-        $this->backgroundColor = $bgColor;
+        if ($bgColor) $this->backgroundColor = $bgColor;
 
         // ?textColor=00ff00
         $textColor = (string)($queryParams['textColor'] ?? 'ffffff');
-        $this->fontColor = $textColor;
+        if ($textColor) $this->fontColor = $textColor;
 
         // ?id=88
         $fileReferenceId = (int)($queryParams['id'] ?? 0);
-        $this->fileReferenceId = $fileReferenceId;
+        if ($fileReferenceId) $this->fileReferenceId = $fileReferenceId;
 
         // ?crop=desktop
         $cropVariant = (string)($queryParams['crop'] ?? 'default');
-        $this->cropVariant = $cropVariant;
+        if ($cropVariant) $this->cropVariant = $cropVariant;
     }
 
     private function loadImage()
     {
-        $fileReference = $this->fileRepository->findFileReferenceByUid($this->fileReferenceId);
+        try {
+            $fileReference = $this->fileRepository->findFileReferenceByUid($this->fileReferenceId);
 
-        $cropVariantCollection = CropVariantCollection::create((string)$fileReference->getProperty('crop'));
-        $cropArea = $cropVariantCollection->getCropArea($this->cropVariant);
-        $parameters['crop'] = $cropArea->isEmpty() ? null : $cropArea->makeAbsoluteBasedOnFile($fileReference);
+            $cropVariantCollection = CropVariantCollection::create((string)$fileReference->getProperty('crop'));
+            $cropArea = $cropVariantCollection->getCropArea($this->cropVariant);
+            $this->parameters['crop'] = $cropArea->isEmpty() ? null : $cropArea->makeAbsoluteBasedOnFile($fileReference);
 
-        $fileReference = $this->imageService->applyProcessingInstructions($fileReference, $parameters);
-        $imageUri = $this->imageService->getImageUri($fileReference, false);
+            $fileReference = $this->imageService->applyProcessingInstructions($fileReference, $this->parameters);
+            $imageUri = $this->imageService->getImageUri($fileReference, false);
 
-        return [$fileReference, $imageUri];
+            return [$fileReference, $imageUri];
+        } catch (Exception $e) {
+            throw new Exception("IMAGE_NOT_FOUND");
+        }
     }
 
     private function validateMiddleware()
@@ -220,7 +225,7 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
     /**
      * Create dummy image and return the url to the image.
      */
-    private function createDummyImage(string $text = "Dummy Image"): string
+    private function createDummyImage(string $text): string
     {
         $w = $this->width;
         $h = $this->height;
@@ -254,21 +259,13 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
             'offset' => "0,$offsetY",
         ];
         $conf['BBOX'] = $imageProcessor->calcBBox($conf);
-        $imageProcessor->makeText($image, $conf, $workArea);
+        $imageProcessor->makeText($dummyImage, $conf, $workArea);
 
         // Write file and return the path 
         $filePath = $this->getImagesPath() . $imageProcessor->filenamePrefix . '_' . StringUtility::getUniqueId() . '.' . $gifOrPng;
-        $imageProcessor->ImageWrite($image, $filePath);
+        $imageProcessor->ImageWrite($dummyImage, $filePath);
 
         return $filePath;
-    }
-
-    /**
-     * Create image not found image and return the url to the image.
-     */
-    public function createImageNotFoundImage(string $text = "Image not found!"): string
-    {
-        return $this->createDummyImage($text);
     }
 
     /**
