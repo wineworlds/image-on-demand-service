@@ -60,11 +60,8 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
              * Ohne eine weitere Extension ist es nicht möglich die Middleware an einen bestimmten Pfad zu binden.
              * 
              * Wenn die URL nicht zutrifft wird ein "throw" angestoßen und über den catch geht es dann weiter an die nächste middleware.
-             * Auch die darauf folgenden Methoden erzeugen diesen Fehler.
              * 
-             * Allerdings fällt mir gerade ein,
-             * das auch wenn kein Bild gefunden wird ein throw ausgelöst wird,
-             * hier würde ich allerdings gerne ein generiertes Bild als Antwort liefern.
+             * Wenn das Bild nicht gefunden wird, wird auch ein "throw" ausgelöst und ein "Bild nicht gefunden" Bild erzeugt.
              */
             $this->validateMiddleware();
 
