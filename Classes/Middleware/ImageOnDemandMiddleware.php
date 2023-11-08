@@ -128,7 +128,7 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
 
         // Extract and sanitize width and height
         $this->width = (int) ceil(($width ?? 400) / $imageStepWidth) * $imageStepWidth;
-        $this->height = (int) $this->height / $width * $this->width;
+        $this->height = (int) ($height / $width * $this->width);
 
         // Define 'width' and 'height' in the parameters array
         $this->parameters['width'] = $this->width . 'c';
