@@ -112,7 +112,6 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
     {
         // Get image step width and height from configuration
         $imageStepWidth = $this->getConfigurationValue('imageStepWidth');
-        $imageStepHeight = $this->getConfigurationValue('imageStepHeight');
 
         // Get the requested path from the request
         $normalizedParams = $request->getAttribute('normalizedParams');
@@ -128,22 +127,19 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
         [$width, $height] = explode('/', $path);
 
         // Extract and sanitize width and height
-        $width = (int) ceil(($width ?? 400) / $imageStepWidth) * $imageStepWidth;
-        $height = (int) ceil(($height ?? 400) / $imageStepHeight) * $imageStepHeight;
-
-        $this->width = $width;
-        $this->height = $height;
+        $this->width = (int) ceil(($width ?? 400) / $imageStepWidth) * $imageStepWidth;
+        $this->height = (int) $this->height / $width * $this->width;
 
         // Define 'width' and 'height' in the parameters array
-        $this->parameters['width'] = $width . 'c';
-        $this->parameters['height'] = $height . 'c';
+        $this->parameters['width'] = $this->width . 'c';
+        $this->parameters['height'] = $this->height . 'c';
 
         // Extract and validate query parameters
         $queryString = $normalizedParams->getQueryString();
         $queryParams = Query::parse($queryString);
 
         // Set cache key
-        $this->cacheIdentifier = 'image_cache_' . (string) $width . '_' . (string) $height . '_' . md5($queryString);
+        $this->cacheIdentifier = 'image_cache_' . (string) $this->width . '_' . (string) $this->height . '_' . md5($queryString);
 
         // Process 'fileExt' query parameter
         $fileExt = (string) ($queryParams['fileExt'] ?? '');
