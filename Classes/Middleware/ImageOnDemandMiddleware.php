@@ -32,6 +32,7 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
     private int $fontSize = 16;
     private string $cropVariant = 'default';
     private string $cacheIdentifier = '';
+    private bool $json = false;
     private int $fileReferenceId = 0;
     private int $width = 400;
     private int $height = 400;
@@ -151,6 +152,12 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
         }
 
         // Process 'text' query parameter
+        $json = (bool) ($queryParams['json'] ?? false);
+        if ($json) {
+            $this->json = $json;
+        }
+
+        // Process 'text' query parameter
         $text = (string) ($queryParams['text'] ?? '');
         if ($text) {
             $this->text = $text;
@@ -215,12 +222,21 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
 
     private function createResponse(string $imageUri, string $fileSize, string $fileMimeType): Response
     {
-
         $streamFactory = new StreamFactory();
-        $response = (new Response())
-            ->withAddedHeader('Content-Length', $fileSize)
-            ->withAddedHeader('Content-Type', $fileMimeType)
-            ->withBody($streamFactory->createStreamFromFile($imageUri));
+
+        if ($this->json) {
+            $response = (new Response())
+                ->withAddedHeader('Content-Type', 'application/json')
+                ->withBody($streamFactory->createStream(json_encode([
+                    "publicUrl" => $imageUri
+                ])));
+        } else {
+            $response = (new Response())
+                ->withAddedHeader('Content-Length', $fileSize)
+                ->withAddedHeader('Content-Type', $fileMimeType)
+                ->withBody($streamFactory->createStreamFromFile($imageUri));
+        }
+
 
         return $response;
     }
