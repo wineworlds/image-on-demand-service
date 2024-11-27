@@ -67,14 +67,14 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
             $this->extractParameter($request);
 
             // Prüft ob die Bild URL im Cache hinterlegt ist.
-            $imageUri = $this->cache->get($this->cacheIdentifier);
-            if ($imageUri !== false) {
-                return $this->createResponse(
-                    $imageUri,
-                    (string)filesize($imageUri),
-                    mime_content_type($imageUri)
-                );
-            }
+            // $imageUri = $this->cache->get($this->cacheIdentifier);
+            // if ($imageUri !== false) {
+            //     return $this->createResponse(
+            //         $imageUri,
+            //         (string)filesize($imageUri),
+            //         mime_content_type($imageUri)
+            //     );
+            // }
 
             // Wenn keine File Reference ID Definiert ist, wird stattdessen ein dummy bild erzeugt.
             if (!$this->fileReferenceId) {
@@ -84,7 +84,7 @@ final class ImageOnDemandMiddleware implements MiddlewareInterface
                 [$fileReference, $imageUri] = $this->loadImage();
             }
 
-            $this->cache->set($this->cacheIdentifier, $imageUri);
+            // $this->cache->set($this->cacheIdentifier, $imageUri);
 
             return $this->createResponse(
                 $imageUri,
